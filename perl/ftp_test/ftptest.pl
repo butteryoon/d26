@@ -7,8 +7,8 @@ use Net::FTP;
 
 my $ftp;
 my $day_cnt = 2;
-my $remote_system = "211.254.95.153";
-my $username = "dark264sh";
+my $remote_system = "192.168.1.1";
+my $username = "test123";
 my $passwd = "test123";
 my $ORG_PATTERN = "FKKKLOG";
 #my $ORG_PATTERN = "FKCCLOG";
