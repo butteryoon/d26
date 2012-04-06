@@ -9,11 +9,16 @@ import (
 func main() {
 	fmt.Println("Hello World !!!")
 	
+//	go server(1)
+//	go server(2)
+/*	
 	fmt.Println(unhex('a'))
 
 	if cnt := 3; cnt > 4 {
 		fmt.Println("ok")
 	}
+*/
+	
 /*
 	sum := 0
 	for i := 0; i < 10; i++ {
@@ -22,6 +27,7 @@ func main() {
 	fmt.Println(sum)
 */
 
+/*
 	var a [4]int
 
 	a[0] = 2
@@ -50,6 +56,7 @@ func main() {
 	for key, value := range m1 {
 		fmt.Println(key, "\t", m1[key], "\t", value)
 	}
+*/
 
 /*
 	f, err := os.Open("./study.go")
@@ -107,9 +114,11 @@ func main() {
 	}
 */
 
+/*
 	for i := 0; i < 5; i++ {
 		defer fmt.Printf("%d ", i)	
 	}
+*/
 }
 
 
@@ -176,4 +185,26 @@ func sum(a []int) int {
 		s += a[i]
 	}
 	return s
+}
+
+func append1(slice, data []byte) []byte {
+	l := len(slice)
+	if l + len(data) > cap(slice) {
+		newSlice := make([]byte, (l+len(data))*2)
+		copy(newSlice, slice)
+		slice = newSlice
+	}
+	
+	slice = slice[0:l+len(data)]
+	for i, c := range data {
+		slice[l+i] =c
+	}
+	
+	return slice
+}
+
+func server(i int) {
+	for {
+		fmt.Println(i)
+	}
 }
