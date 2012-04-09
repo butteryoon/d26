@@ -14,15 +14,111 @@ void print_func(st_PATTERN *p, char *data)
 	printf("data=%d\n", *value);
 }
 
+void test_search(st_PATTERN *type, st_PATTERN *p, char *input, int size)
+{
+	int			i, ret;
+	OFFSET		offset = 0;
+	char		*data = NULL;
+	char		buf[1024];
+	int			len = 0;
+	int			code = 0;
+	int			tag = 0;
+	int			flag = 0, stop_flag = 0;
+
+	for(i = 0; i < size; i++)
+	{
+		if(flag == 1)
+		{
+			if((input[i] == 0x20) || (input[i] == 0x3A))
+			{
+				continue;
+			}
+			else
+			{
+				offset = 0;
+				data = NULL;
+				flag = 2;
+				stop_flag = 1;
+				len = 0;
+			}
+		}
+
+		if(flag == 0)
+		{
+			ret = pattern_find_each(type, &offset, &data, input[i]);
+			if((ret < 0) && (data != NULL)) 
+			{
+				tag = *(int *)data;
+				flag = 1;
+			}
+		}
+
+		if(flag == 2)
+		{
+			if(input[i] == 0x0D)
+			{
+				if(data != NULL) code = *(int *)data;
+				buf[len] = 0x00;
+printf("===> find tag=%d code=%d value=%s\n", tag, code, buf);
+				flag = 0;
+				offset = 0;
+				data = NULL;
+				code = 0;
+			}
+			else
+			{
+				buf[len++] = input[i];
+			}
+
+			if(stop_flag > 0)
+			{
+				ret = pattern_find_each(p, &offset, &data, input[i]);
+				if((ret < 0) && (data != NULL)) 
+				{
+					code = *(int *)data;
+					stop_flag = 0;
+				}
+			}
+		}
+	}
+}
+
+void test_search1(st_PATTERN *p, char *input, int size)
+{
+	int			i, ret;
+	int			code;
+	OFFSET		offset = 0;
+	char		*data = NULL;
+
+	for(i = 0; i < size; i++)
+	{
+printf("===> 1 offset=%ld data=%p input=%c\n", offset, data, input[i]);
+		if((ret = pattern_find_each(p, &offset, &data, input[i])) < 0)
+		{
+			if(data != NULL) 
+			{
+				code = *(int *)data;
+printf("===> find code=%d\n", code);
+			}
+		}
+printf("===> 2 offset=%ld data=%p input=%c\n", offset, data, input[i]);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	int				opt;
 	st_PATTERN		*p;
+	st_PATTERN		*type;
 
+//	int				i;
 	int				ret;
+	int				len;
 	int				data;
-	char			*value;
-	char			buf[BUFSIZ];
+//	int				out_len;
+//	char			*value;
+	char			buf[1024];
+//	char			out[BUFSIZ];
 
 	while((opt = getopt(argc, argv, "f:p:")) != -1)
 	{
@@ -41,7 +137,13 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	sprintf(buf, "abc");
+	if((type = pattern_init(8, 10240, 10240)) == NULL)
+	{
+		printf("pattern_init null\n");
+		exit(0);
+	}
+
+	sprintf(buf, "daum.net");
 	data = 10;
 	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
 	{
@@ -49,7 +151,7 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	sprintf(buf, "abcd");
+	sprintf(buf, "no-cache");
 	data = 20;
 	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
 	{
@@ -57,7 +159,7 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	sprintf(buf, "facebook");
+	sprintf(buf, "facebook.com");
 	data = 30;
 	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
 	{
@@ -67,7 +169,7 @@ int main(int argc, char **argv)
 
 //pattern_reset(p);
 
-	sprintf(buf, "google");
+	sprintf(buf, "google.com");
 	data = 40;
 	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
 	{
@@ -75,7 +177,7 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	sprintf(buf, "ab");
+	sprintf(buf, "imbc.co1");
 	data = 50;
 	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
 	{
@@ -83,28 +185,126 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
+	sprintf(buf, "imbc");
+	data = 60;
+	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+	sprintf(buf, "PooqiP");
+	data = 70;
+	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+	sprintf(buf, "keep-alive");
+	data = 80;
+	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+	sprintf(buf, "Host");
+	data = 100;
+	if((ret = pattern_add(type, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+	sprintf(buf, "User-Agent");
+	data = 110;
+	if((ret = pattern_add(type, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+	sprintf(buf, "Connection");
+	data = 120;
+	if((ret = pattern_add(type, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+
+/*
 	pattern_print(p, print_func);
 
 	sprintf(buf, "abc");
-//	sprintf(buf, "goo");
 	if((ret = pattern_del(p, buf, strlen(buf))) < 0)
 	{
 		printf("pattern_del ret=%d\n", ret);
 		exit(0);
 	}
+*/
 
 	pattern_print(p, print_func);
+	pattern_print(type, print_func);
 
 	printf("#################\n");
-	sprintf(buf, "www.abc123.com");
-	if((value = pattern_find(p, buf, strlen(buf))) == NULL)
+
+	len = 0;
+
+#if 0
+	for(i = 0; i < 10; i++)
 	{
-		printf("not find str=%s\n", buf);
+		buf[len++] = i + 1;
+	}
+#endif
+
+	sprintf(&buf[len], 
+		"GET /onair/TVplayerLive.ashx?channelid=0 HTTP/1.1\r\n"
+		"Host: pooq.imbc.com\r\n"
+		"User-Agent: PooqiPhone/1.2 CFNetwork/548.0.4 Darwin/11.0.0\r\n"
+		"Accept: */*\r\n"
+		"Accept-Language: ko-kr\r\n"
+		"Accept-Encoding: gzip, deflate\r\n"
+		"Connection: keep-alive\r\n"
+		"\r\n"
+		"X-AspNet-Version: 2.0.50727\r\n"
+		"Cache-Control: no-cache\r\n"
+		"\r\n"
+		);
+
+//	len += strlen(&buf[len]);
+	len = strlen(buf);
+
+#if 0
+	for(i = 0; i < 10; i++)
+	{
+		buf[len++] = i + 1;
+	}
+#endif
+
+	buf[len] = 0x00;
+
+#if 0
+	sprintf(buf, "imbc");
+	len = strlen(buf);
+//	out_len = BUFSIZ;
+	if((value = pattern_find(p, buf, len)) == NULL)
+	{
+		printf("===> not find str=\n%s\n", buf);
 	}
 	else
 	{
-		printf("find str=%s data=%d\n", buf, *(int *)value);
+//		printf("===> find data=%d out=%s\nstr=\n%s\n", *(int *)value, out, buf);
+		printf("===> find data=%d str=\n%s\n", *(int *)value, buf);
 	}
+#endif
+
+	test_search(type, p, buf, len);
+//	test_search1(p, buf, len);
+
+	printf("#####################\n");
+	printf("DATA=\n%s", buf);
 
 	return 0;
 }
@@ -385,8 +585,43 @@ char *pattern_find(st_PATTERN *p, char *input, int size)
 		if(pCur->dataOffset > 0) data = pattern_ptr(p, pCur->dataOffset) + sizeof(st_PATTERN_DATA);
 	}
 
-printf("find loop cnt=%d:%d\n", i, size);
+printf("===> find loop cnt=%d:%d\n", i, size);
 	return data;
+}
+
+int pattern_find_each(st_PATTERN *p, OFFSET *root, char **data, char input)
+{
+	int					flag = 1;
+	int					c;
+	OFFSET				offset;
+	st_PATTERN_NODE		*pPrev, *pCur;
+
+	offset = *root;
+	if(offset <= 0) offset = p->nodeStartOffset;
+
+	pPrev = (st_PATTERN_NODE *)pattern_ptr(p, offset);
+
+	c = input;
+	offset = pPrev->nextNodeOffset[c];
+	if(offset == 0)
+	{
+		if(*data != NULL) {
+			flag = -1;
+		}
+		else {
+			offset = p->nodeStartOffset;
+		}
+		pCur = NULL;
+	}
+	else
+	{
+		pCur = (st_PATTERN_NODE *)pattern_ptr(p, offset);
+	}
+
+	if((pCur != NULL) && (pCur->dataOffset > 0)) *data = pattern_ptr(p, pCur->dataOffset) + sizeof(st_PATTERN_DATA);
+	*root = offset;
+
+	return flag;
 }
 
 void pattern_sub_print(st_PATTERN *p, st_PATTERN_NODE *node, char *value, int cnt, void (*print_func)(st_PATTERN *p, char *data))

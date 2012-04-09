@@ -42,6 +42,7 @@ extern int pattern_del(st_PATTERN *p, char *pattern, int size);
 extern void pattern_reset(st_PATTERN *p);
 extern char *pattern_find(st_PATTERN *p, char *input, int size);
 extern void pattern_print(st_PATTERN *p, void (*print_func)(st_PATTERN *p, char *data));
+extern int pattern_find_each(st_PATTERN *p, OFFSET *root, char **data, char input);
 
 
 #endif
