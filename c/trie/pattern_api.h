@@ -5,6 +5,18 @@
 #define MAX_NODE_ARRAY		256
 #define MAX_PATTERN_LEN		1024
 
+#define STATE_TAG			1
+#define STATE_SSKIP			2
+#define STATE_VSKIP			3
+#define STATE_VALUE			4
+#define STATE_0D			5
+#define STATE_0D0A			6
+#define STATE_0D0A0D	   	7
+#define STATE_0D0A0D0A 		8
+#define STATE_0D0D			9
+#define STATE_0A			10
+#define STATE_0A0A			11
+
 typedef struct __pattern_node__
 {
 	char		isFree;
@@ -33,6 +45,12 @@ typedef struct __pattern__
 	OFFSET		nodeFreeOffset;
 } st_PATTERN;
 
+typedef struct __pattern_base__
+{
+	int			base;
+	char		stack[MAX_PATTERN_LEN];
+} st_PATTERN_BASE;
+
 #define pattern_offset(infoptr, ptr)  (OFFSET) ((char *) (ptr==NULL?0:(char *)ptr-(char *)infoptr))
 #define pattern_ptr(infoptr, offset)  (char *) ((OFFSET) (offset==0?NULL:(OFFSET)offset+(char *)infoptr))
 
@@ -42,7 +60,8 @@ extern int pattern_del(st_PATTERN *p, char *pattern, int size);
 extern void pattern_reset(st_PATTERN *p);
 extern char *pattern_find(st_PATTERN *p, char *input, int size);
 extern void pattern_print(st_PATTERN *p, void (*print_func)(st_PATTERN *p, char *data));
-extern int pattern_find_each(st_PATTERN *p, OFFSET *root, char **data, char input);
+extern int pattern_find_each(st_PATTERN *p, st_PATTERN_BASE *pBASE, OFFSET *root, char **data, char input);
+extern int pattern_find_first(st_PATTERN *p, OFFSET *root, char **data, char input);
 
 
 #endif

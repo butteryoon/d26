@@ -14,73 +14,266 @@ void print_func(st_PATTERN *p, char *data)
 	printf("data=%d\n", *value);
 }
 
-void test_search(st_PATTERN *type, st_PATTERN *p, char *input, int size)
+int state_tag(st_PATTERN *type, OFFSET *offset, char **data, char value)
 {
-	int			i, ret;
+	int		ret;
+	int		state = STATE_TAG;
+
+	ret = pattern_find_first(type, offset, data, value);
+	if(ret < 0)
+	{
+		if(data == NULL) {
+			switch(value)
+			{
+			case 0x0D:
+				state = STATE_0D;
+				break;
+			case 0x0A:
+				state = STATE_0A;
+				break;
+			default:
+				state = STATE_VSKIP;
+				break;
+			}
+
+		}
+		else {
+			switch(value)
+			{
+			case 0x20:
+			case 0x3A:
+				state = STATE_SSKIP;
+				break;
+			case 0x0D:
+				state = STATE_0D;
+				break;
+			case 0x0A:
+				state = STATE_0A;
+				break;
+			default:
+				state = STATE_VSKIP;
+				break;
+			}
+		}
+	}
+
+	return state;
+}
+
+int state_sskip(char value)
+{
+	int		state;
+
+	switch(value)
+	{
+	case 0x20:
+	case 0x3A:
+		state = STATE_SSKIP;
+		break;
+	case 0x0D:
+		state = STATE_0D;
+		break;
+	case 0x0A:
+		state = STATE_0A;
+		break;
+	default:
+		state = STATE_VALUE;
+		break;
+	}
+
+	return state;
+}
+
+int state_vskip(char value)
+{
+	int		state;
+
+	switch(value)
+	{
+	case 0x0D:
+		state = STATE_0D;
+		break;
+	case 0x0A:
+		state = STATE_0A;
+		break;
+	default:
+		state = STATE_VSKIP;
+		break;
+	}
+
+	return state;
+}
+
+int state_0d0a(int sts, char value)
+{
+	int		state;
+
+	switch(sts)
+	{
+	case STATE_0D:
+		switch(value)
+		{
+		case 0x0D:
+			state = STATE_0D0D;
+			break;
+		case 0x0A:
+			state = STATE_0D0A;
+			break;
+		default:
+			state = STATE_TAG;
+			break;
+		}
+		break;
+	case STATE_0A:
+		switch(value)
+		{
+		case 0x0D:
+			state = STATE_0D;
+			break;
+		case 0x0A:
+			state = STATE_0A0A;
+			break;
+		default:
+			state = STATE_TAG;
+			break;
+		}
+		break;
+	case STATE_0D0A:
+		switch(value)
+		{
+		case 0x0D:
+			state = STATE_0D0A0D;
+			break;
+		case 0x0A:
+			state = STATE_0A0A;
+			break;
+		default:
+			state = STATE_TAG;
+			break;
+		}
+		break;
+	case STATE_0D0A0D:
+		switch(value)
+		{
+		case 0x0D:
+			state = STATE_0D0D;
+			break;
+		case 0x0A:
+			state = STATE_0D0A0D0A;
+			break;
+		default:
+			state = STATE_TAG;
+			break;
+		}
+		break;
+	default:
+		state = STATE_TAG;
+		break;
+	}
+
+	return state;
+}
+
+int state_value(st_PATTERN *p, st_PATTERN_BASE *pBASE, OFFSET *offset, char **data, char value)
+{
+	int		state;
+
+	pattern_find_each(p, pBASE, offset, data, value);
+	
+	switch(value)
+	{
+	case 0x0D:
+		state = STATE_0D;
+		break;
+	case 0x0A:
+		state = STATE_0A;
+		break;
+	default:
+		state = STATE_VALUE;
+		break;
+	}
+
+	return state;
+}
+
+int test_search(st_PATTERN *type, st_PATTERN *p, char *input, int size, int *state)
+{
+	int			i;
 	OFFSET		offset = 0;
 	char		*data = NULL;
 	char		buf[1024];
 	int			len = 0;
 	int			code = 0;
 	int			tag = 0;
-	int			flag = 0, stop_flag = 0;
+	int			sts = *state;
+	st_PATTERN_BASE		stBASE;
+	st_PATTERN_BASE		*pBASE = &stBASE;
 
 	for(i = 0; i < size; i++)
 	{
-		if(flag == 1)
+		switch(sts)
 		{
-			if((input[i] == 0x20) || (input[i] == 0x3A))
-			{
-				continue;
+		case STATE_TAG:
+			sts = state_tag(type, &offset, &data, input[i]);		  
+			if(sts == STATE_SSKIP && data != NULL) {
+				tag = *((int *)data);
+				// assign p (st_PATTERN)
+				printf("tag=%d\n", tag);
 			}
-			else
-			{
+			break;
+		case STATE_SSKIP:
+			sts = state_sskip(input[i]);
+			if(sts == STATE_VALUE) {
 				offset = 0;
 				data = NULL;
-				flag = 2;
-				stop_flag = 1;
 				len = 0;
+				i--;
 			}
-		}
-
-		if(flag == 0)
-		{
-			ret = pattern_find_each(type, &offset, &data, input[i]);
-			if((ret < 0) && (data != NULL)) 
-			{
-				tag = *(int *)data;
-				flag = 1;
-			}
-		}
-
-		if(flag == 2)
-		{
-			if(input[i] == 0x0D)
-			{
-				if(data != NULL) code = *(int *)data;
-				buf[len] = 0x00;
-printf("===> find tag=%d code=%d value=%s\n", tag, code, buf);
-				flag = 0;
+			break;
+		case STATE_VSKIP:
+			sts = state_vskip(input[i]);
+			break;
+		case STATE_0D:
+		case STATE_0A:
+		case STATE_0D0A:
+		case STATE_0D0A0D:
+			sts = state_0d0a(sts, input[i]);
+			if(sts == STATE_TAG) {
 				offset = 0;
 				data = NULL;
-				code = 0;
+				i--;
 			}
-			else
-			{
-				buf[len++] = input[i];
+			else if(sts == STATE_0D0D || sts == STATE_0A0A || sts == STATE_0D0A0D0A) {
+				*state = STATE_0D0A0D0A;
+				return i;
 			}
-
-			if(stop_flag > 0)
-			{
-				ret = pattern_find_each(p, &offset, &data, input[i]);
-				if((ret < 0) && (data != NULL)) 
-				{
-					code = *(int *)data;
-					stop_flag = 0;
+			break;
+		case STATE_VALUE:
+			sts = state_value(p, pBASE, &offset, &data, input[i]);
+			if(sts == STATE_0D || sts == STATE_0A) {
+				buf[len] = 0x00;
+				printf("value=%d:%s\n", len, buf);
+				if(data != NULL) {
+					code = *((int *)data);
+					printf("code=%d\n", code);
 				}
 			}
+			else {
+				buf[len++] = input[i];
+			}
+			break;
+		default:
+			sts = STATE_TAG;
+			offset = 0;
+			data = NULL;
+			i--;
+			break;
 		}
 	}
+
+	*state = sts;
+
+	return i;
 }
 
 void test_search1(st_PATTERN *p, char *input, int size)
@@ -89,11 +282,13 @@ void test_search1(st_PATTERN *p, char *input, int size)
 	int			code;
 	OFFSET		offset = 0;
 	char		*data = NULL;
+	st_PATTERN_BASE		stBASE;
+	st_PATTERN_BASE		*pBASE = &stBASE;
 
 	for(i = 0; i < size; i++)
 	{
-printf("===> 1 offset=%ld data=%p input=%c\n", offset, data, input[i]);
-		if((ret = pattern_find_each(p, &offset, &data, input[i])) < 0)
+//printf("===> 1 offset=%ld data=%p input=%c\n", offset, data, input[i]);
+		if((ret = pattern_find_each(p, pBASE, &offset, &data, input[i])) < 0)
 		{
 			if(data != NULL) 
 			{
@@ -101,16 +296,18 @@ printf("===> 1 offset=%ld data=%p input=%c\n", offset, data, input[i]);
 printf("===> find code=%d\n", code);
 			}
 		}
-printf("===> 2 offset=%ld data=%p input=%c\n", offset, data, input[i]);
+//printf("===> 2 offset=%ld data=%p input=%c\n", offset, data, input[i]);
 	}
 }
 
+#if 0
 int main(int argc, char **argv)
 {
 	int				opt;
 	st_PATTERN		*p;
 	st_PATTERN		*type;
 
+	int				state;
 //	int				i;
 	int				ret;
 	int				len;
@@ -177,7 +374,7 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	sprintf(buf, "imbc.co1");
+	sprintf(buf, "pooq.imbc.com");
 	data = 50;
 	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
 	{
@@ -233,6 +430,21 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
+	sprintf(buf, "Content-Type");
+	data = 130;
+	if((ret = pattern_add(type, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+	sprintf(buf, "Ho");
+	data = 140;
+	if((ret = pattern_add(type, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
 
 /*
 	pattern_print(p, print_func);
@@ -262,14 +474,18 @@ int main(int argc, char **argv)
 	sprintf(&buf[len], 
 		"GET /onair/TVplayerLive.ashx?channelid=0 HTTP/1.1\r\n"
 		"Host: pooq.imbc.com\r\n"
+		"x-Host: pooq.imbc.com111\r\n"
 		"User-Agent: PooqiPhone/1.2 CFNetwork/548.0.4 Darwin/11.0.0\r\n"
 		"Accept: */*\r\n"
 		"Accept-Language: ko-kr\r\n"
 		"Accept-Encoding: gzip, deflate\r\n"
 		"Connection: keep-alive\r\n"
+		"Content-Type: application/json; charset=UTF-8\r\n"
+		"X-Content-Type-Options: nosniff\r\n"
 		"\r\n"
 		"X-AspNet-Version: 2.0.50727\r\n"
 		"Cache-Control: no-cache\r\n"
+		"Host: pooq.imbc.com222\r\n"
 		"\r\n"
 		);
 
@@ -300,11 +516,116 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	test_search(type, p, buf, len);
+	state = STATE_TAG;
+	ret = test_search(type, p, buf, len, &state);
 //	test_search1(p, buf, len);
 
 	printf("#####################\n");
-	printf("DATA=\n%s", buf);
+	printf("ILEN=%d OLEN=%d STATE=%d DATA=\n%s", len, ret, state, buf);
+
+	return 0;
+}
+#endif
+
+int main(int argc, char **argv)
+{
+	int				opt;
+	st_PATTERN		*p;
+
+//	int				state;
+//	int				i;
+	int				ret;
+	int				len;
+	int				data;
+//	int				out_len;
+//	char			*value;
+	char			buf[1024];
+//	char			out[BUFSIZ];
+
+	while((opt = getopt(argc, argv, "f:p:")) != -1)
+	{
+		switch(opt)
+		{
+		case 'f':
+			break;
+		case 'p':
+			break;
+		}
+	}
+
+	if((p = pattern_init(8, 10240, 10240)) == NULL)
+	{
+		printf("pattern_init null\n");
+		exit(0);
+	}
+
+	sprintf(buf, "m.stom.videofarm.daum.net");
+	data = 10;
+	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+	sprintf(buf, "story.kakao.co.kr");
+	data = 20;
+	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+	sprintf(buf, "tory.kakao.co.kr");
+	data = 30;
+	if((ret = pattern_add(p, buf, strlen(buf), &data)) < 0)
+	{
+		printf("pattern_add ret=%d\n", ret);
+		exit(0);
+	}
+
+	pattern_print(p, print_func);
+
+	printf("#################\n");
+
+	len = 0;
+
+	sprintf(&buf[len], 
+		"up-m.story.kakao.co.kr\r\n"
+#if 0
+		"GET /onair/TVplayerLive.ashx?channelid=0 HTTP/1.1\r\n"
+		"Host: up-m.story.kakao.co.kr\r\n"
+		"x-Host: pooq.imbc.com111\r\n"
+		"User-Agent: PooqiPhone/1.2 CFNetwork/548.0.4 Darwin/11.0.0\r\n"
+		"Accept: */*\r\n"
+		"Accept-Language: ko-kr\r\n"
+		"Accept-Encoding: gzip, deflate\r\n"
+		"Connection: keep-alive\r\n"
+		"Content-Type: application/json; charset=UTF-8\r\n"
+		"X-Content-Type-Options: nosniff\r\n"
+		"\r\n"
+		"X-AspNet-Version: 2.0.50727\r\n"
+		"Cache-Control: no-cache\r\n"
+		"Host: pooq.imbc.com222\r\n"
+		"\r\n"
+#endif
+		);
+
+	len = strlen(buf);
+	buf[len] = 0x00;
+
+	printf("input str=\n%s\n", buf);
+	test_search1(p, buf, len);
+
+#if 0
+	if((value = pattern_find(p, buf, len)) == NULL)
+	{
+		printf("===> not find str=\n%s\n", buf);
+	}
+	else
+	{
+		printf("===> find data=%d str=\n%s\n", *(int *)value, buf);
+	}
+#endif
 
 	return 0;
 }
@@ -560,6 +881,8 @@ char *pattern_find(st_PATTERN *p, char *input, int size)
 {
 	int					i;
 	int					c;
+	int					base = 0;
+	int					cnt = 0;
 	OFFSET				offset;
 	char				*data = NULL;
 	st_PATTERN_NODE		*pCur, *pNext;
@@ -567,6 +890,7 @@ char *pattern_find(st_PATTERN *p, char *input, int size)
 	pCur = (st_PATTERN_NODE *)pattern_ptr(p, p->nodeStartOffset);
 	for(i = 0; i < size; i++)
 	{
+		cnt++;
 		c = input[i];
 		offset = pCur->nextNodeOffset[c];
 		if(offset == 0)
@@ -576,7 +900,15 @@ char *pattern_find(st_PATTERN *p, char *input, int size)
 			}
 			else {
 				offset = p->nodeStartOffset;
+printf("reset idx=%d:%c base=%d\n", i, c, base);
+				if(base > 0) i = base;
+				base = 0;
 			}
+		}
+		else if(base == 0) 
+		{
+			base = i + 1;
+printf("find idx=%d:%c base=%d\n", i, c, base);
 		}
 
 		pNext = (st_PATTERN_NODE *)pattern_ptr(p, offset);
@@ -585,11 +917,61 @@ char *pattern_find(st_PATTERN *p, char *input, int size)
 		if(pCur->dataOffset > 0) data = pattern_ptr(p, pCur->dataOffset) + sizeof(st_PATTERN_DATA);
 	}
 
-printf("===> find loop cnt=%d:%d\n", i, size);
+printf("===> find loop cnt=%d:%d\n", cnt, size);
 	return data;
 }
 
-int pattern_find_each(st_PATTERN *p, OFFSET *root, char **data, char input)
+int pattern_find_each(st_PATTERN *p, st_PATTERN_BASE *pBASE, OFFSET *root, char **data, char input)
+{
+	int					flag = 1;
+	int					c;
+	int					i, cnt;
+	OFFSET				offset;
+	st_PATTERN_NODE		*pPrev, *pCur;
+
+	offset = *root;
+	if(offset < 0) return -1;
+	else if(offset == 0) offset = p->nodeStartOffset;
+
+	if(offset == p->nodeStartOffset) pBASE->base = 0;
+
+	pPrev = (st_PATTERN_NODE *)pattern_ptr(p, offset);
+
+	c = input;
+	offset = pPrev->nextNodeOffset[c];
+	if(offset == 0)
+	{
+		if(*data != NULL) {
+			flag = -1;
+			offset = -1;
+		}
+		else {
+			offset = p->nodeStartOffset;
+
+			if(pBASE->base > 0) {
+				pBASE->stack[pBASE->base++] = c;
+				cnt = pBASE->base;
+				for(i = 1; i < cnt; i++)
+				{
+					pattern_find_each(p, pBASE, &offset, data, pBASE->stack[i]);
+				}
+			}
+		}
+		pCur = NULL;
+	}
+	else
+	{
+		pCur = (st_PATTERN_NODE *)pattern_ptr(p, offset);
+		pBASE->stack[pBASE->base++] = c;
+	}
+
+	if((pCur != NULL) && (pCur->dataOffset > 0)) *data = pattern_ptr(p, pCur->dataOffset) + sizeof(st_PATTERN_DATA);
+	*root = offset;
+
+	return flag;
+}
+
+int pattern_find_first(st_PATTERN *p, OFFSET *root, char **data, char input)
 {
 	int					flag = 1;
 	int					c;
@@ -605,12 +987,7 @@ int pattern_find_each(st_PATTERN *p, OFFSET *root, char **data, char input)
 	offset = pPrev->nextNodeOffset[c];
 	if(offset == 0)
 	{
-		if(*data != NULL) {
-			flag = -1;
-		}
-		else {
-			offset = p->nodeStartOffset;
-		}
+		flag = -1;
 		pCur = NULL;
 	}
 	else
