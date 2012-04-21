@@ -901,7 +901,7 @@ char *pattern_find(st_PATTERN *p, char *input, int size)
 			else {
 				offset = p->nodeStartOffset;
 printf("reset idx=%d:%c base=%d\n", i, c, base);
-				if(base > 0) i = base;
+				if(base > 0) i = base - 1;
 				base = 0;
 			}
 		}
